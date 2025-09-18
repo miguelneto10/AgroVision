@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<title>Relatório de Ocorrências — (auto v2/v1 + miniatura + popup + rótulo)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<style>
+  :root{ --muted:#6b7280; --border:#e5e7eb; }
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:20px;color:#111}
+  h1{margin:0 0 12px}
+  .occ{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:10px;padding:8px;margin-bottom:10px;background:#fff}
+  .thumb{width:220px;height:110px;object-fit:cover;border-radius:8px;border:1px solid #eee;cursor:pointer}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#f8f9fa}
+  .pill-high{background:#fee2e2;border-color:#fecaca}.pill-mid{background:#fef3c7;border-color:#fde68a}.pill-low{background:#dcfce7;border-color:#bbf7d0}
+  .link{background:none;border:none;color:#2563eb;cursor:pointer;padding:0;font:inherit}
+  .muted{color:var(--muted)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .hr{height:1px;background:#eee;margin:10px 0}
+  /* Modal */
+  .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:20px;z-index:1000}
+  .modal{background:#fff;border-radius:12px;max-width:96vw;max-height:92vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+  .modal header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #eee;position:sticky;top:0;background:#fff}
+  .tabs{display:flex;gap:8px;border-bottom:1px solid #eee;margin:10px}
+  .tab{padding:6px 10px;border:1px solid #eee;border-bottom:none;border-radius:8px 8px 0 0;background:#f8fafc;cursor:pointer}
+  .tab.on{background:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<h1>Relatório de Ocorrências</h1>
+<p class="muted">Este arquivo procura <code>occurrences_v2.json</code> e, se não achar, usa <code>occurrences.json</code>. As miniaturas devem estar em <code>./thumbs/</code>. Para rotular, a API precisa estar acessível (CORS) e a URL pode ser definida com <code>localStorage.setItem('API_URL','http://localhost:8000')</code>.</p>
+<div id="wrap"></div>
+
+<div class="backdrop" id="bd" onclick="if(event.target.id==='bd') closeM()">
+  <div class="modal">
+    <header><div id="mt">Visualização</div><button onclick="closeM()">×</button></header>
+    <div class="tabs">
+      <div id="to" class="tab on" onclick="tab('o')">Overlay</div>
+      <div id="tf" class="tab" onclick="tab('f')">Frame</div>
+      <div id="tc" class="tab" onclick="tab('c')">Comparar</div>
+    </div>
+    <div id="vo"><img id="io" style="max-width:96vw;max-height:80vh"/></div>
+    <div id="vf" style="display:none"><img id="if" style="max-width:96vw;max-height:80vh"/></div>
+    <div id="vc" style="display:none;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <img id="ic1" style="max-width:48vw;max-height:80vh"/>
+      <img id="ic2" style="max-width:48vw;max-height:80vh"/>
+    </div>
+  </div>
+</div>
+
+<script>
+function tab(w){ document.getElementById('to').classList.toggle('on',w==='o'); document.getElementById('tf').classList.toggle('on',w==='f'); document.getElementById('tc').classList.toggle('on',w==='c'); document.getElementById('vo').style.display=(w==='o')?'block':'none'; document.getElementById('vf').style.display=(w==='f')?'block':'none'; document.getElementById('vc').style.display=(w==='c')?'grid':'none'; }
+function openM(frame, overlay, title){ document.getElementById('io').src=overlay||''; document.getElementById('if').src=frame||''; document.getElementById('ic1').src=frame||''; document.getElementById('ic2').src=overlay||''; document.getElementById('mt').textContent=title||'Visualização'; document.getElementById('bd').style.display='flex'; tab('o'); }
+function closeM(){ document.getElementById('bd').style.display='none'; }
+function sevClass(s){ if(s>=1.3) return 'pill-high'; if(s>=0.8) return 'pill-mid'; return 'pill-low'; }
+
+async function fetchFirst(paths){
+  for (const p of paths){
+    try { const r = await fetch(p); if (r.ok) { const j = await r.json(); return {data:j, path:p}; } } catch(e){}
+  }
+  throw new Error('Nenhum arquivo de ocorrências encontrado.');
+}
+
+async function main(){
+  const base = location.href.substring(0, location.href.lastIndexOf('/')+1);
+  const {data:occs} = await fetchFirst([base+'occurrences_v2.json', base+'occurrences.json']);
+  const frameName = o=> 'frame'+(o.frame ?? o.idx ?? o.id)+'.png';
+  const overlayName = o=> 'frame'+(o.frame ?? o.idx ?? o.id)+'_overlay.png';
+  const thumb = name => base + 'thumbs/' + name;
+
+  const wrap = document.getElementById('wrap');
+  occs.forEach((o,i)=>{
+    const frame = thumb(frameName(o));
+    const overlay = thumb(overlayName(o));
+    const sev = (o.evidence && (o.evidence.severity ?? o.severity)) ?? (o.severity ?? 0);
+    const conf = o.confidence ?? o.conf ?? 0;
+    const type = o.type ?? o.label ?? 'ocorrencia';
+    const time = o.time_s ?? o.time ?? 0;
+    const area = o.area_px ?? o.area ?? 0;
+    const ev = o.evidence || {zmin:o.zmin, roi_ratio:o.roi_ratio, near_veg_ratio:o.near_veg_ratio};
+
+    const d = document.createElement('div'); d.className='occ';
+    d.innerHTML = `
+      <img class="thumb" src="${overlay}" onclick="openM('${frame}','${overlay}','~${(time.toFixed?time.toFixed(1):time)}s (Frame ~${o.frame||o.idx||o.id})')"/>
+      <div class="b">
+        <div><strong>~${(time.toFixed?time.toFixed(1):time)}s</strong> (Frame ~${o.frame||o.idx||o.id}) — <span class="pill">${type}</span> · <span class="pill ${sevClass(+sev)}">sev ${(+sev).toFixed(2)}</span> — conf ${conf}%</div>
+        <div>${o.recommendation||o.rec||''}</div>
+        <div class="muted">zmin:${ev?.zmin ?? ''} | ROI:${ev?.roi_ratio ?? ''} | nearVeg:${ev?.near_veg_ratio ?? ''} | área:${area}</div>
+        <div>
+          <button class="link" onclick="openM('${frame}','${overlay}','Frame ~${o.frame||o.idx||o.id}')">ver frame</button> ·
+          <button class="link" onclick="openM('${frame}','${overlay}','Overlay ~${o.frame||o.idx||o.id}')">ver overlay</button> ·
+          <button class="link" onclick="sendLabel(${i}, 'confirm')">confirmar ocorrência</button> ·
+          <button class="link" onclick="sendLabel(${i}, 'fp')">marcar como falso positivo</button>
+          <span id="lab-${i}" class="muted"></span>
+        </div>
+      </div>`;
+    wrap.appendChild(d);
+  });
+
+  window.sendLabel = async function(idx, label){
+    const API = localStorage.getItem('API_URL') || 'http://localhost:8000';
+    const o = occs[idx]; const msg = document.getElementById('lab-'+idx);
+    msg.textContent = ' — enviando...';
+    try {
+      const payload = { run_id: o.run_id || 'report', frame:o.frame, time_s:o.time_s, type:o.type, bbox:o.bbox, label, evidence:o.evidence };
+      const r = await fetch(API + '/train', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      msg.textContent = r.ok ? (label==='confirm'?' — confirmado':' — falso positivo') : ' — erro ao enviar';
+    } catch (e) {
+      msg.textContent = ' — falha de rede';
+    }
+  }
+}
+main();
+</script>
+</body>
+</html>

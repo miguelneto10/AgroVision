@@ -1,0 +1,7 @@
+AgroVision v0.7c — bundle
+- API: veg_product_api_v07b.py (lê options_json e repassa flags para o CLI; /train com treino leve)
+- CLI: veg_product_cli.py (detecção conservadora; soil-guard ON; thresholds ajustáveis por flags)
+- Painel: veg_panel_index.html (abas Overlay/Frame/Comparar; progresso bonito; rótulos -> /train)
+- Utils: model_utils.py (treino/inferência)
+- Template: report_backend_auto.html
+Gerado: 2025-09-18 19:46:05

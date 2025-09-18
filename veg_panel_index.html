@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Painel — v0.7c (abas + progresso)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{ --fg:#111; --muted:#6b7280; --border:#e5e7eb; --accent:#111; }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:20px;color:var(--fg)}
+  .card{border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px;background:#fff}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .btn{padding:9px 14px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+  .btn-soft{background:#f3f4f6;border:1px solid var(--border);color:#111;padding:7px 12px;border-radius:8px;cursor:pointer}
+  .muted{color:var(--muted)}
+  .occ{border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;gap:10px;align-items:flex-start;background:#fff}
+  .thumbbox{width:220px;max-width:35vw;height:110px;border:1px solid #eee;border-radius:8px;overflow:hidden;background:#fafafa;display:flex;align-items:center;justify-content:center;color:#9ca3af}
+  .thumbbox img{width:100%;height:100%;object-fit:cover;display:block}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #e5e7eb;background:#f8f9fa}
+  .pill-high{background:#fee2e2;border-color:#fecaca}.pill-mid{background:#fef3c7;border-color:#fde68a}.pill-low{background:#dcfce7;border-color:#bbf7d0}
+  .link{background:none;border:none;color:#2563eb;cursor:pointer;padding:0;font:inherit}
+  .timeline{position:relative;height:24px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
+  .timeline .mark{position:absolute;top:2px;bottom:2px;width:6px;border-radius:3px;background:#6ee7b7;cursor:pointer}
+  .timeline .mark.mid{background:#fde68a}.timeline .mark.high{background:#fca5a5}
+  /* Modal */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:20px;z-index:1000}
+  .modal{background:#fff;border-radius:12px;max-width:96vw;max-height:92vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+  .modal header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #eee;position:sticky;top:0;background:#fff}
+  .tabs{display:flex;gap:8px;border-bottom:1px solid #eee;margin:0 14px}
+  .tab{padding:8px 12px;border:1px solid #eee;border-bottom:none;border-radius:10px 10px 0 0;background:#f8fafc;cursor:pointer}
+  .tab.on{background:#fff;font-weight:600}
+  .viewer{padding:12px 14px}
+  .viewer img{max-width:100%;max-height:78vh;border:1px solid #eee;border-radius:10px}
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  /* Pretty progress bar */
+  .pbar{position:relative;width:280px;height:12px;background:#eef2ff;border:1px solid #dbeafe;border-radius:999px;overflow:hidden}
+  .pbar > div{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#4f46e5,#06b6d4);transition:width .2s}
+  .pbarlabel{min-width:60px;display:inline-block;color:#4253ff}
+  input[type="number"]{width:110px;padding:6px;border:1px solid #e5e7eb;border-radius:8px}
+  input[type="checkbox"]{transform:scale(1.1);margin-right:6px}
+  select{padding:6px;border:1px solid #e5e7eb;border-radius:8px}
+</style>
+</head>
+<body>
+  <h1>Painel — v0.7c</h1>
+  <div class="card">
+    <div class="row">
+      <input id="file" type="file" accept="video/mp4,video/quicktime"/>
+      <button id="go" class="btn">Analisar</button>
+      <button id="openReport" class="btn-soft">Abrir relatório</button>
+      <span class="muted">API: <code id="apiurl"></code></span>
+      <span class="pbarlabel" id="ptext">0%</span><div class="pbar"><div id="pfill"></div></div>
+    </div>
+    <div class="row" style="gap:16px;margin-top:10px">
+      <label>Step (every): <input id="every" type="number" min="1" max="120" value="30"></label>
+      <label>Área mínima (px): <input id="minArea" type="number" min="0" step="100" value="6000"></label>
+      <label>Concordância: 
+        <select id="agreeK"><option value="2">2</option><option value="3">3</option></select>
+      </label>
+      <label>Severidade mín: 
+        <select id="minSev">
+          <option value="0.9">0.9 (padrão)</option>
+          <option value="1.3">1.3 (alta)</option>
+          <option value="0.6">0.6 (sensível)</option>
+        </select>
+      </label>
+      <label><input id="soilGuard" type="checkbox" checked> Soil‑guard ativo</label>
+    </div>
+    <div class="row" style="gap:16px;margin-top:6px">
+      <label>Confiança mínima (filtro): <span id="confv">60</span>%
+        <input id="conf" type="range" min="0" max="95" value="60"/>
+      </label>
+      <label>Severidade mínima (filtro):
+        <select id="sevmin">
+          <option value="all">Todas</option>
+          <option value="mid">≥0.8</option>
+          <option value="high">≥1.3</option>
+        </select>
+      </label>
+      <label><input id="hideNA" type="checkbox" checked> Ocultar não-agrícola</label>
+    </div>
+    <div class="muted" id="msg" style="margin-top:6px"></div>
+  </div>
+
+  <h2>Ocorrências</h2>
+  <div id="occs" style="display:grid;grid-template-columns:1fr;gap:10px"></div>
+
+  <!-- Modal -->
+  <div id="mback" class="modal-backdrop" onclick="if(event.target.id==='mback') closeM()">
+    <div class="modal">
+      <header><div id="mtitle">Visualização</div><button onclick="closeM()">×</button></header>
+      <div class="tabs">
+        <div id="tabOverlay" class="tab on" onclick="setTab('overlay')">Overlay</div>
+        <div id="tabFrame" class="tab" onclick="setTab('frame')">Frame</div>
+        <div id="tabCompare" class="tab" onclick="setTab('compare')">Comparar</div>
+      </div>
+      <div class="viewer">
+        <div id="viewOverlay"><img id="imgOverlay"/></div>
+        <div id="viewFrame" style="display:none"><img id="imgFrame"/></div>
+        <div id="viewCompare" style="display:none">
+          <div class="twocol"><img id="imgLeft"/><img id="imgRight"/></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API = localStorage.getItem("API_URL") || "http://localhost:8000";
+document.getElementById("apiurl").textContent = API;
+
+let LAST=null, ARTS=[], OCCS=[], THUMBS_BASE=null;
+const NON_AGRI = new Set(["céu/horizonte","fora_ROI","faixa_estrutural"]);
+const el = (id)=>document.getElementById(id);
+const fnum=(o)=>o.frame??o.idx??o.id??o.frame_idx??0;
+
+function thumbsBase(){ const th=ARTS.find(a=>a.name==='thumbs/')||ARTS.find(a=>a.name.endsWith('thumbs')||a.name.endsWith('thumbs/')); return th?(API+th.url+(th.url.endsWith('/')?'':'/')):null; }
+function thumb(n,ov=false){ const b=THUMBS_BASE||thumbsBase(); return b? b+`frame${n}${ov?'_overlay':''}.png`:null; }
+function findReport(){ return ARTS.find(a=>a.name==='report.html')||ARTS.find(a=>a.name==='report_v2.html')||ARTS.find(a=>a.name.endsWith('.html')&&a.name.includes('report')); }
+function sevClass(s){ if(s>=1.3) return 'pill pill-high'; if(s>=0.8) return 'pill pill-mid'; return 'pill pill-low'; }
+function setMsg(t){ el('msg').textContent=t; }
+
+function renderCards(list){
+  const wrap=el('occs'); wrap.innerHTML='';
+  list.forEach((o,i)=>{
+    const n=fnum(o), fr=thumb(n,false), ov=thumb(n,true);
+    const ev=o.evidence||{};
+    const div=document.createElement('div'); div.className='occ'; div.id='occ-'+i;
+    div.innerHTML=`
+      <div class="thumbbox"><img src="${ov||fr||''}" onerror="this.onerror=null;this.src='${fr||''}'"/></div>
+      <div class="b">
+        <div><strong>~${(o.time_s||0).toFixed(1)}s</strong> (Frame ~${n}) — <span class="pill">${o.type||'ocorrência'}</span> · <span class="${sevClass(ev.severity||0)}">sev ${(ev.severity||0).toFixed(2)}</span> — conf ${o.confidence??0}% ${o.ml?`· ml:${o.ml.score}`:''}</div>
+        <div>${o.recommendation||''}</div>
+        <div class="muted">zmin:${ev.zmin} | ROI:${ev.roi_ratio} | nearVeg:${ev.near_veg_ratio} | área:${o.area_px}</div>
+        <div>
+          <button class="link" onclick="openModal('${fr}','${ov}','frame','Frame ~${n}')">ver frame</button> ·
+          <button class="link" onclick="openModal('${fr}','${ov}','overlay','Overlay ~${n}')">ver overlay</button> ·
+          <button class="link" onclick="labelOcc(${i}, 'confirm')">confirmar ocorrência</button> ·
+          <button class="link" onclick="labelOcc(${i}, 'fp')">marcar como falso positivo</button>
+        </div>
+      </div>`;
+    wrap.appendChild(div);
+  });
+}
+
+function setTab(which){
+  ['Overlay','Frame','Compare'].forEach(n=>el('tab'+n).classList.toggle('on', n.toLowerCase()===which));
+  el('viewOverlay').style.display = which==='overlay'?'block':'none';
+  el('viewFrame').style.display   = which==='frame'  ?'block':'none';
+  el('viewCompare').style.display = which==='compare'?'block':'none';
+}
+
+function openModal(frameUrl, overlayUrl, start='overlay', title='Visualização'){
+  el('imgOverlay').src = overlayUrl||'';
+  el('imgFrame').src   = frameUrl||'';
+  el('imgLeft').src    = frameUrl||'';
+  el('imgRight').src   = overlayUrl||frameUrl||'';
+  el('mtitle').textContent = title;
+  el('mback').style.display='flex';
+  setTab(start);
+}
+function closeM(){ el('mback').style.display='none'; }
+
+function filtered(base){
+  const confMin=+el('conf').value, sevSel=el('sevmin').value, hideNA=el('hideNA').checked;
+  let L=base.slice().filter(o=>(o.confidence||0)>=confMin);
+  if (sevSel==='mid') L=L.filter(o=>(o.evidence?.severity||0)>=0.8);
+  if (sevSel==='high') L=L.filter(o=>(o.evidence?.severity||0)>=1.3);
+  if (hideNA) L=L.filter(o=>!NON_AGRI.has(o.type));
+  return L;
+}
+
+async function labelOcc(i,label){
+  try{
+    const o=OCCS[i];
+    const payload={run_id:LAST?.run_id,frame:fnum(o),time_s:o.time_s,type:o.type,label,bbox:o.bbox,evidence:o.evidence};
+    const r=await fetch(API+'/train',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const j=await r.json(); alert(`Rótulo enviado (${label}). Modelo: ${j?.model?.ok?'treinado':'sem treino'} (n=${j?.model?.n||0})`);
+  }catch(e){ alert('Falha ao enviar rótulo: '+e.message); }
+}
+
+el('conf').addEventListener('input', e=>{ el('confv').textContent=e.target.value; renderCards(filtered(OCCS)); });
+el('sevmin').addEventListener('change', ()=>renderCards(filtered(OCCS)));
+el('hideNA').addEventListener('change', ()=>renderCards(filtered(OCCS)));
+
+document.getElementById('openReport').onclick=()=>{ const rep=findReport(); if(rep) window.open(API+rep.url,'_blank'); else alert('Relatório não encontrado.'); };
+
+// Upload com barra de progresso bonita
+document.getElementById('go').addEventListener('click', async ()=>{
+  const f=el('file').files[0]; if(!f){ alert('Selecione um vídeo.'); return; }
+  const opts={
+    every:+el('every').value||30,
+    min_area:+el('minArea').value||6000,
+    agree_k:+el('agreeK').value||2,
+    min_severity:+el('minSev').value||0.9,
+    soil_guard: el('soilGuard').checked
+  };
+  const fd=new FormData(); fd.append('file',f,f.name); fd.append('options_json', JSON.stringify(opts));
+
+  const pfill=el('pfill'), ptext=el('ptext');
+  pfill.style.width='0%'; ptext.textContent='0% (upload)';
+  setMsg('Enviando…');
+
+  await new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST', API+'/analyze', true);
+    xhr.responseType='json';
+    xhr.upload.onprogress=(ev)=>{ if(ev.lengthComputable){ const p=Math.round((ev.loaded/ev.total)*100); pfill.style.width=p+'%'; ptext.textContent=p+'% (upload)'; } };
+    xhr.onload=()=>{
+      if(xhr.status>=200 && xhr.status<300){
+        const data=xhr.response || JSON.parse(xhr.responseText);
+        LAST=data; ARTS=data.artifacts||[]; THUMBS_BASE=thumbsBase();
+        const occItem = ARTS.find(a=>a.name==='occurrences_v2.json') || ARTS.find(a=>a.name==='occurrences.json');
+        if (occItem){
+          fetch(API+occItem.url).then(r=>r.json()).then(json=>{ OCCS=json; renderCards(filtered(OCCS)); setMsg('Concluído.'); });
+        } else { OCCS=[]; renderCards([]); setMsg('Concluído (sem ocorrências).'); }
+        pfill.style.width='100%'; ptext.textContent='100%';
+        resolve(None);
+      }else{
+        reject(new Error('HTTP '+xhr.status));
+      }
+    };
+    xhr.onerror=()=>reject(new Error('Falha de rede'));
+    xhr.send(fd);
+  }).catch(e=>{ setMsg('Erro: '+e.message); });
+});
+</script>
+</body>
+</html>
